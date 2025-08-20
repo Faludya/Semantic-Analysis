@@ -1,0 +1,528 @@
+/*
+   Simple +/-/* expression language; 
+   parser evaluates constant expressions on the fly
+*/
+
+package cup.example;
+
+import java_cup.runtime.*;
+import cup.example.Lexer;
+import java.io.IOException;
+import java.io.File;
+import java.io.FileInputStream;
+
+parser code {:
+  	protected Lexer lexer;
+  	protected MultiPathTree tree = new MultiPathTree();
+  	public MultiPathTree getParseTree(){
+  		return tree;
+  }
+:}
+
+/* define how to connect to the scanner! */
+init with {:
+  ComplexSymbolFactory f = new ComplexSymbolFactory();
+  symbolFactory = f;
+  File file = new File("input.txt");
+  FileInputStream fis = null;
+  try {
+    fis = new FileInputStream(file);
+  } catch (IOException e) {
+    e.printStackTrace();
+  } 
+  lexer = new Lexer(f,fis);
+:};
+scan with {: return lexer.next_token(); :};
+
+/* Terminals */
+terminal            SEMI, PLUS, MINUS, TIMES, LPAREN, RPAREN, DIV;
+
+terminal 			COMM;
+terminal			LESS, LESSEQUAL, GREATER, GREATEREQUAL; // relational operators
+terminal			EQUAL, NOTEQUAL; // equality operators
+terminal			OR, AND, NOT; // logical operators
+terminal			ASGOP; // assignment operators
+terminal			LCURLY, RCURLY, LSQUARE, RSQUARE, COMMA; // separators
+terminal			BOOLEAN, BREAK, CONTINUE, ELSE, FOR, FLOAT, IF, INT, RETURN, VOID, WHILE;
+terminal Integer	INT_LIT;
+terminal Float		FLOAT_LIT;
+terminal Boolean 	BOOLEAN_LIT;
+terminal String		STRING_LIT, ID;
+terminal 			UMINUS, UPLUS, UNOT;
+
+/* Non Terminals */
+non terminal MultiPathTree programCode;
+non terminal TreeNode program;
+non terminal TreeNode func_decl;
+non terminal TreeNode var_decl;
+non terminal TreeNode type;
+non terminal TreeNode identifier;
+non terminal TreeNode para_list;
+non terminal TreeNode compound_list;
+non terminal TreeNode init_declarator_list;
+non terminal TreeNode init_declarator;
+non terminal TreeNode extended_declarator;
+non terminal TreeNode declarator;
+non terminal TreeNode initialiser;
+non terminal TreeNode expr;
+non terminal TreeNode extended_expr;
+non terminal TreeNode compound_stmt;
+non terminal TreeNode extended_var_decl;
+non terminal TreeNode extended_stmt;
+non terminal TreeNode stmt;
+non terminal TreeNode if_stmt;
+non terminal TreeNode for_stmt;
+non terminal TreeNode while_stmt;
+non terminal TreeNode break_stmt;
+non terminal TreeNode continue_stmt;
+non terminal TreeNode return_stmt;
+non terminal TreeNode expr_stmt;
+non terminal TreeNode assignment_expr;
+non terminal TreeNode cond_or_expr;
+non terminal TreeNode extended_cond_or_expr;
+non terminal TreeNode cond_and_expr;
+non terminal TreeNode equality_expr;
+non terminal TreeNode rel_expr;
+non terminal TreeNode multiplicative_expr;
+non terminal TreeNode additive_expr;
+non terminal TreeNode unary_expr;
+non terminal TreeNode primary_expr;
+non terminal TreeNode arg_list;
+non terminal TreeNode proper_para_list;
+non terminal TreeNode para_decl;
+non terminal TreeNode extended_para_decl;
+non terminal TreeNode proper_arg_list;
+non terminal TreeNode arg;
+non terminal TreeNode extended_arg;
+
+/* Precedences */
+precedence left MINUS, PLUS;
+precedence left TIMES, DIV;
+precedence left UMINUS, UPLUS, UNOT;
+
+/* The grammar rules */
+programCode
+	::= program:p											{:System.out.println("programCode => program\n");
+															tree.initialize(p);
+															RESULT=tree;
+															:}
+	;
+program
+	::= func_decl:f_d program:p								{:System.out.println("program => func_decl\n");
+															RESULT=TreeNode.createProgramNode(f_d, p);
+															:}
+	|	var_decl:v_d program:p								{:System.out.println("program => var_decl\n");
+															RESULT=TreeNode.createProgramNode(v_d, p);
+															:}
+	|														{:System.out.println("program => \n");
+															RESULT=TreeNode.createProgramNode(null, null);
+															:}
+	;
+	
+func_decl
+	::= type:t identifier:i para_list:p_l compound_stmt:c_s	{:System.out.println("func_decl => type identifier para_list compound_list\n");
+															RESULT=TreeNode.createFuncDeclNode(t, i, p_l, c_s);
+															:}
+	;
+	
+var_decl
+	::= type:t init_declarator_list:i_d_l SEMI				{:System.out.println("var_decl => type init_declarator_list SEMI\n");
+															RESULT=TreeNode.createValDecl(t, i_d_l);
+															:}
+	;
+	
+init_declarator_list
+	::= init_declarator:i_d extended_declarator:e_d			{:System.out.println("init_declarator_list => init_declarator extended_declarator\n");
+															RESULT=TreeNode.createInitDeclaratorList(i_d, e_d);
+															:}
+	;
+	
+extended_declarator
+	::= COMMA init_declarator_list:i_d_l	extended_declarator:e_d		{:System.out.println("extended_declarator => init_declarator_list\n");
+																		RESULT=TreeNode.createExtendedDeclarator(i_d_l, e_d);
+																		:}
+	| 																	{:System.out.println("extended_declarator =>  \n");
+																		RESULT=TreeNode.createExtendedDeclarator(null, null);
+																		:}
+	;
+	
+init_declarator
+	::= declarator:d											{:System.out.println("init_declarator => declarator\n");
+																RESULT=TreeNode.createInitDeclarator(d, null);
+																:}
+	| 	declarator:d ASGOP initialiser:i						{:System.out.println("init_declarator => declarator ASGOP initialiser\n");
+																RESULT=TreeNode.createInitDeclarator(d, i);
+																:}
+	;
+	
+declarator
+	::= identifier:i											{:System.out.println("declarator => identifier\n");
+																RESULT=TreeNode.createDeclarator(i);
+																:}
+	| 	identifier:i LSQUARE RSQUARE							{:System.out.println("declarator => identifier LSQUARE RSQUARE\n");
+																RESULT=TreeNode.createDeclarator(i);
+																:}
+	|	identifier:i LSQUARE INT_LIT:i_l RSQUARE				{:System.out.println("declarator => identifier LSQUARE INT_LIT RSQUARE\n");
+																RESULT=TreeNode.createDeclarator(i, i_l);
+																:}
+	;
+	
+initialiser
+	::= expr:e												{:System.out.println("initialiser => expr\n");
+															RESULT=TreeNode.createInitialiser(e, null);
+															:}
+	|	LCURLY expr:e extended_expr:e_e RCURLY				{:System.out.println("initialiser => LCURLY expr extended_expr RCURLY\n");
+															RESULT=TreeNode.createInitialiser(e, e_e);
+															:}
+	;
+	
+extended_expr
+	::= COMMA expr:e extended_expr:e_e						{:System.out.println("extended_expr => COMMA expr\n");
+															RESULT=TreeNode.createExtendedExpr(e, e_e);
+															:}
+	|														{:System.out.println("extended_expr => \n");
+															RESULT=TreeNode.createExtendedExpr(null, null);
+															:}
+	;
+	
+type
+	::= VOID												{:System.out.println("type => VOID\n");
+															RESULT=TreeNode.createType("void");
+															:}
+	|   BOOLEAN												{:System.out.println("type => BOOLEAN\n");
+															RESULT=TreeNode.createType("boolean");
+															:}
+	|	INT													{:System.out.println("type => INT\n");
+															RESULT=TreeNode.createType("int");
+															:}
+	|	FLOAT												{:System.out.println("type => FLOAT\n");
+															RESULT=TreeNode.createType("float");
+															:}
+	;
+	
+identifier
+	::= ID:id												{:System.out.println("identifier => ID\n");
+															RESULT=TreeNode.createIdentifier(id);
+															:}
+	;
+	
+compound_stmt
+	::= LCURLY extended_var_decl:e_v_d extended_stmt:e_s RCURLY		{:System.out.println("compound_stmt => LCURLY extended_var_decl extended_stmt RCURLY\n");
+																	RESULT=TreeNode.createCompoundStmt(e_v_d, e_s);
+																	:}
+	;
+	
+extended_var_decl
+	::= var_decl:v_d extended_var_decl:e_v_d				{:System.out.println("extended_var_decl => var_decl\n");
+															RESULT=TreeNode.createExtendedVarDecl(v_d, e_v_d);
+															:}
+	|														{:System.out.println("extended_var_decl => \n");
+															RESULT=TreeNode.createCompoundStmt(null, null);
+															:}
+	;
+	
+extended_stmt
+	::= stmt:s extended_stmt:e_s							{:System.out.println("extended_stmt => stmt\n");
+															RESULT=TreeNode.createExtendedStmt(s, e_s);
+															:}
+	|														{:System.out.println("extended_stmt => \n");
+															RESULT=TreeNode.createExtendedStmt(null, null);
+															:}
+	;
+	
+stmt
+	::= compound_stmt:c_s									{:System.out.println("stmt => compound_stmt\n");
+															RESULT=TreeNode.createStmt(c_s);
+															:}
+	| 	if_stmt:i_s											{:System.out.println("stmt => if_stmt\n");
+															RESULT=TreeNode.createStmt(i_s);
+															:}
+	| 	for_stmt:f_s										{:System.out.println("stmt => for_stmt\n");
+															RESULT=TreeNode.createStmt(f_s);
+															:}
+	|	while_stmt:w_s										{:System.out.println("stmt => while_stmt\n");
+															RESULT=TreeNode.createStmt(w_s);
+															:}
+	|	break_stmt:b_s										{:System.out.println("stmt => break_stmt\n");
+															RESULT=TreeNode.createStmt(b_s);
+															:}
+	| 	continue_stmt:c_s									{:System.out.println("stmt => continue_stmt\n");
+															RESULT=TreeNode.createStmt(c_s);
+															:}
+	|  	return_stmt:r_s										{:System.out.println("stmt => return_stmt\n");
+															RESULT=TreeNode.createStmt(r_s);
+															:}
+	|   expr_stmt:e_s										{:System.out.println("stmt => expr_stmt\n");
+															RESULT=TreeNode.createStmt(e_s);
+															:}
+	;	
+		
+if_stmt
+	::= IF LPAREN expr:e RPAREN stmt:s						{:System.out.println("func_decl => identifier para_list compound_list\n");
+															RESULT=TreeNode.createIfStmt(e, s, null);
+															:}
+	|   IF LPAREN expr:e RPAREN stmt:s1 ELSE stmt:s2		{:System.out.println("func_decl => identifier para_list compound_list\n");
+															RESULT=TreeNode.createIfStmt(e, s1, s2);
+															:}
+	; 
+	
+for_stmt
+	::= FOR LPAREN expr:e1 SEMI expr:e2 SEMI expr:e3 RPAREN stmt:s    	{:System.out.println("func_decl => identifier para_list compound_list\n");
+																		RESULT=TreeNode.createForStmt(e1, e2, e3, s);
+																		:}
+	|   FOR LPAREN expr:e1 SEMI expr:e2 SEMI RPAREN stmt:s		   		{:System.out.println("func_decl => identifier para_list compound_list\n");
+																		RESULT=TreeNode.createForStmt(e1, e2, s, null);
+																		:}
+	|   FOR LPAREN expr:e1 SEMI SEMI expr:e2 RPAREN stmt:s    	   		{:System.out.println("func_decl => identifier para_list compound_list\n");
+																		RESULT=TreeNode.createForStmt(e1, e2, s, null);
+																		:}
+	|   FOR LPAREN expr:e SEMI SEMI RPAREN stmt:s    		   			{:System.out.println("func_decl => identifier para_list compound_list\n");
+																		RESULT=TreeNode.createForStmt(e, s, null, null);
+																		:}
+	|   FOR LPAREN SEMI expr:e1 SEMI expr:e2 RPAREN stmt:s         		{:System.out.println("func_decl => identifier para_list compound_list\n");
+																		RESULT=TreeNode.createForStmt(e1, e2, s, null);
+																		:}
+	|   FOR LPAREN SEMI expr:e SEMI RPAREN stmt:s              			{:System.out.println("func_decl => identifier para_list compound_list\n");
+																		RESULT=TreeNode.createForStmt(e, s, null, null);
+																		:}
+	|   FOR LPAREN SEMI SEMI expr:e RPAREN stmt:s              			{:System.out.println("func_decl => identifier para_list compound_list\n");
+																		RESULT=TreeNode.createForStmt(e, s, null, null);
+																		:}
+	|   FOR LPAREN SEMI SEMI RPAREN stmt:s    			   				{:System.out.println("func_decl => identifier para_list compound_list\n");
+																		RESULT=TreeNode.createForStmt(s, null, null, null);
+																		:}
+	;
+	
+while_stmt
+    ::= WHILE LPAREN expr:e RPAREN stmt:s                   {:System.out.println("while_stmt => WHILE LPAREN expr RPAREN stmt\n");
+															RESULT=TreeNode.createWhileStmt(e, s);
+															:}
+    ;
+    
+break_stmt
+    ::= BREAK SEMI                                          {:System.out.println("break_stmt => BREAK SEMI\n");
+															RESULT=TreeNode.createBreakStmt();
+															:}
+    ;
+    
+continue_stmt
+    ::= CONTINUE SEMI                                       {:System.out.println("continue_stmt => CONTINUE SEMI\n");
+															RESULT=TreeNode.createContinueStmt();
+															:}
+    ;
+    
+return_stmt
+    ::= RETURN SEMI                                         {:System.out.println("return_stmt => RETURN SEMI\n");
+															RESULT=TreeNode.createReturnStmt(null);
+															:}
+    |   RETURN expr:e SEMI                                  {:System.out.println("return_stmt => RETURN expr SEMI\n");
+															RESULT=TreeNode.createReturnStmt(e);
+															:}
+    ;  
+    
+expr_stmt
+    ::= SEMI                                                  {:System.out.println("expr_stmt => SEMI\n");
+															  RESULT=TreeNode.createExprStmt(null);
+															  :}
+    |   expr:e SEMI                                           {:System.out.println("expr_stmt => expr SEMI\n");
+															  RESULT=TreeNode.createExprStmt(e);
+															  :}
+    ;
+    
+expr
+    ::= assignment_expr:a_e                                 {:System.out.println("expr => assignment_expr\n");
+															RESULT=TreeNode.createAssignmentStmt(a_e);
+															:}
+    ;
+    
+assignment_expr
+    ::= extended_cond_or_expr:e_c_o_e cond_or_expr:c_o_e    {:System.out.println("assignment_expr => extended_cond_or_expr cond_or_expr\n");
+															RESULT=TreeNode.createAssignmentExpr(e_c_o_e, c_o_e);
+															:}
+    ;
+    
+extended_cond_or_expr
+    ::= extended_cond_or_expr:e_c_o_e cond_or_expr:c_o_e ASGOP     {:System.out.println("extended_cond_or_expr => cond_or_expr\n");
+																	RESULT=TreeNode.createExtendedCondOrExpr(e_c_o_e, c_o_e);
+																	:}
+    |                                                       		{:System.out.println("extended_cond_or_expr => \n");
+																	RESULT=TreeNode.createExtendedCondOrExpr(null, null);
+																	:}
+    ;
+    
+cond_or_expr
+    ::= cond_and_expr:c_a_e                                 {:System.out.println("cond_or_expr => cond_and_expr\n");
+															RESULT=TreeNode.createCondOrExpr(c_a_e);
+															:}
+    |   cond_or_expr:c_o_e OR cond_and_expr:c_a_e          {:System.out.println("cond_or_expr => cond_or_expr OR cond_and_expr\n");
+															RESULT=TreeNode.createCondOrExpr(c_o_e, c_a_e);
+															:}
+    ; 
+    
+cond_and_expr
+	::= equality_expr:e_e									{:System.out.println("cond_and_expr => equality_expr\n");
+															RESULT=TreeNode.createCondAndExpr(e_e);
+															:}
+	|   cond_and_expr:c_a_e AND equality_expr:e_e			{:System.out.println("cond_and_expr => cond_and_expr AND equality_expr\n");
+															RESULT=TreeNode.createCondAndExpr(c_a_e, e_e);
+															:}
+	;
+	
+equality_expr
+	::= rel_expr:r_e										{:System.out.println("equality_expr => rel_expr\n");
+															RESULT=TreeNode.createEqualityExpr(r_e);
+															:}
+	|   equality_expr:e_e EQUAL rel_expr:r_e				{:System.out.println("equality_expr => equality_expr EQUAL rel_expr\n");
+															RESULT=TreeNode.createEqualityExpr(e_e, r_e, "==");
+															:}
+	|	equality_expr:e_e NOTEQUAL rel_expr:r_e				{:System.out.println("equality_expr => equality_expr NOTEQUAL rel_expr\n");
+															RESULT=TreeNode.createEqualityExpr(e_e, r_e, "!=");
+															:}
+	;
+	
+rel_expr
+	::= additive_expr:a_e									{:System.out.println("rel_expr => additive_expr\n");
+															RESULT=TreeNode.createRelExpr(a_e);
+															:}
+	|   rel_expr:r_e LESS additive_expr:a_e					{:System.out.println("rel_expr => rel_expr LESS additive_expr\n");
+															RESULT=TreeNode.createRelExpr(r_e, a_e, "<");
+															:}
+	|   rel_expr:r_e LESSEQUAL additive_expr:a_e			{:System.out.println("rel_expr => rel_expr LESSEQUAL additive_expr\n");
+															RESULT=TreeNode.createRelExpr(r_e, a_e, "<=");
+															:}
+	|	rel_expr:r_e GREATER additive_expr:a_e				{:System.out.println("rel_expr => rel_expr GREATER additive_expr\n");
+															RESULT=TreeNode.createRelExpr(r_e, a_e, ">");
+															:}
+	|	rel_expr:r_e GREATEREQUAL additive_expr:a_e			{:System.out.println("rel_expr => rel_expr GREATEREQUAL additive_expr\n");
+															RESULT=TreeNode.createRelExpr(r_e, a_e, ">=");
+															:}
+	;
+	
+additive_expr
+	::= multiplicative_expr:m_e									{:System.out.println("additive_expr => multiplicative_expr\n");
+																RESULT=TreeNode.createAdditiveExpr(m_e);
+																:}
+	|	additive_expr:a_e PLUS multiplicative_expr:m_e			{:System.out.println("additive_expr => additive_expr PLUS multiplicative_expr\n");
+																RESULT=TreeNode.createAdditiveExpr(a_e, m_e, "+");
+																:}
+	| 	additive_expr:a_e MINUS multiplicative_expr:m_e			{:System.out.println("additive_expr => additive_expr MINUS multiplicative_expr\n");
+																RESULT=TreeNode.createAdditiveExpr(a_e, m_e, "-");
+																:}
+	;
+	
+multiplicative_expr
+	::= unary_expr:u_e											{:System.out.println("multiplicative_expr => unary_expr\n");
+																RESULT=TreeNode.createMultiplicativeExpr(u_e);
+																:}
+	| multiplicative_expr:m_e TIMES unary_expr:u_e				{:System.out.println("multiplicative_expr => multiplicative_expr TIMES unary_expr\n");
+																RESULT=TreeNode.createMultiplicativeExpr(m_e, u_e, "*");
+																:}
+	| multiplicative_expr:m_e DIV unary_expr:u_e				{:System.out.println("multiplicative_expr => multiplicative_expr DIV unary_expr\n");
+																RESULT=TreeNode.createMultiplicativeExpr(m_e, u_e, "/");
+																:}
+	;
+	
+unary_expr
+	::= PLUS unary_expr:u_e										{:System.out.println("unary_expr => PLUS unary_expr\n");
+																RESULT=TreeNode.createUnaryExpr(u_e, "+");
+																:}
+	%prec UPLUS
+	| 	MINUS unary_expr:u_e									{:System.out.println("unary_expr => MINUS unary_expr\n");
+																RESULT=TreeNode.createUnaryExpr(u_e, "-");
+																:}
+	%prec UMINUS
+	|	NOT unary_expr:u_e										{:System.out.println("unary_expr => NOT unary_expr\n");
+																RESULT=TreeNode.createUnaryExpr(u_e, "!");
+																:}
+	%prec UNOT
+	| 	primary_expr:p_e										{:System.out.println("unary_expr => primary_expr\n");
+																RESULT=TreeNode.createUnaryExpr(p_e, "");
+																:}
+	;
+	
+primary_expr
+	::= identifier:i										{:System.out.println("primary_expr => identifier\n");
+															RESULT=TreeNode.createPrimaryExpr(i);
+															:}
+	| 	identifier:i arg_list:a_l							{:System.out.println("primary_expr => identifier arg_list\n");
+															RESULT=TreeNode.createPrimaryExpr(i, a_l);
+															:}
+	| 	identifier:i LSQUARE expr:e RSQUARE					{:System.out.println("primary_expr => identifier LSQUARE expr RSQUARE\n");
+															RESULT=TreeNode.createPrimaryExpr(i, e);
+															:}
+	|	LPAREN expr:e RPAREN								{:System.out.println("primary_expr => LPAREN expr RPAREN\n");
+															RESULT=TreeNode.createPrimaryExpr(e, null);
+															:}
+	|	INT_LIT:i_l											{:System.out.println("primary_expr => INT_LIT\n");
+															RESULT=TreeNode.createPrimaryExpr(Integer.toString(i_l));
+															:}
+	|	FLOAT_LIT:f_l											{:System.out.println("primary_expr => FLOAT_LIT\n");
+															RESULT=TreeNode.createPrimaryExpr(Float.toString(f_l));
+															:}
+	|	BOOLEAN_LIT:b_l											{:System.out.println("primary_expr => BOOLEAN_LIT\n");
+															RESULT=TreeNode.createPrimaryExpr(Boolean.toString(b_l));
+															:}
+	|	STRING_LIT:s_l											{:System.out.println("primary_expr => STRING_LIT\n");
+															RESULT=TreeNode.createPrimaryExpr(s_l);
+															:}
+	;
+	
+para_list
+	::= LPAREN RPAREN										{:System.out.println("para_list => LPAREN RPAREN\n");
+															RESULT=TreeNode.createParaList(null);
+															:}
+	|	LPAREN proper_para_list:p_p_l RPAREN				{:System.out.println("para_list => LPAREN proper_para_list RPAREN\n");
+															RESULT=TreeNode.createParaList(p_p_l);
+															:}
+	;
+	
+proper_para_list
+	::= para_decl:p_d extended_para_decl:e_p_d				{:System.out.println("proper_para_list => para_decl extended_para_decl\n");
+															RESULT=TreeNode.createProperParaList(p_d, e_p_d);
+															:}
+	;
+	
+extended_para_decl
+	::= COMMA para_decl:p_d	extended_para_decl:e_p_d		{:System.out.println("extended_para_decl => COMMA para_decl\n");
+															RESULT=TreeNode.createExtendedParaDecl(p_d, e_p_d);
+															:}
+	|														{:System.out.println("extended_para_decl => \n");
+															RESULT=TreeNode.createExtendedParaDecl(null, null);
+															:}
+	;
+	
+para_decl
+	::=	type:t declarator:d									{:System.out.println("para_decl => type declarator\n");
+															RESULT=TreeNode.createParaDecl(t, d);
+															:}
+	;
+	
+arg_list
+	::= LPAREN proper_arg_list:p_a_l RPAREN					{:System.out.println("arg_list => LPAREN proper_arg_list RPAREN\n");
+															RESULT=TreeNode.createArgList(p_a_l);
+															:}
+	|	LPAREN RPAREN										{:System.out.println("arg_list => LPAREN RPAREN\n");
+															RESULT=TreeNode.createArgList(null);
+															:}
+	;
+	
+proper_arg_list
+	::= arg:a extended_arg:e_a								{:System.out.println("proper_arg_list => arg extended_arg\n");
+															RESULT=TreeNode.createProperArgList(a, e_a);
+															:}
+	;
+	
+extended_arg
+	::= COMMA arg:a extended_arg:e_a						{:System.out.println("extended_arg => arg\n");
+															RESULT=TreeNode.createExtendedArg(a, e_a);
+															:}
+	|														{:System.out.println("extended_arg => \n");
+															RESULT=TreeNode.createExtendedArg(null, null);
+															:}
+	;
+	
+arg
+	::= expr:e												{:System.out.println("arg => expr\n");
+															RESULT=TreeNode.createArg(e);
+															:}
+	;
