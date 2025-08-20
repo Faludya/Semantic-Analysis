@@ -1,0 +1,15 @@
+int area(int c1, int c2){
+	int result;
+	
+	result = (c1*c2)/2;
+	
+	return result;
+}
+
+int main() { 
+	int c1 = 11 + 12;
+	int c2 = 20;
+	int area = area(number);
+	
+	return 0;
+}
